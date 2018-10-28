@@ -39,7 +39,7 @@ func (dir *Directory) GetSubDirectory(path string) *Directory {
 
 // Print prints the contents of the directory
 func (dir Directory) Print() {
-	fmt.Println(dir.decryptedPath)
+	//fmt.Println(dir.decryptedPath)
 
 	for _, dir := range dir.dirs {
 		fmt.Printf("D\t%s\n", dir.decryptedName)
@@ -57,8 +57,8 @@ func (dir *Directory) CreateFile(filename string) (*File, error) {
 		return nil, err
 	}
 
-	fmt.Printf("Encrypted filename: %s\n", encryptedFilename)
-	fmt.Printf("Encrypted path: %s\n", filepath.Join(dir.encryptedPath, encryptedFilename))
+	//fmt.Printf("Encrypted filename: %s\n", encryptedFilename)
+	//fmt.Printf("Encrypted path: %s\n", filepath.Join(dir.encryptedPath, encryptedFilename))
 
 	var file File
 	file.crypto = dir.crypto
@@ -114,7 +114,6 @@ func (dir *Directory) updateDirectory() {
 			subDir.encryptedPath = dir.crypto.getFilePath(subDir.uuid)
 
 			dir.dirs = append(dir.dirs, subDir)
-			fmt.Println(subDir)
 		} else {
 			var file File
 
@@ -129,7 +128,6 @@ func (dir *Directory) updateDirectory() {
 			file.encryptedPath = filepath.Join(dir.encryptedPath, f.Name())
 
 			dir.files = append(dir.files, file)
-			fmt.Println(decrypted)
 		}
 	}
 

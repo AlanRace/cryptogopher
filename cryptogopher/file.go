@@ -5,7 +5,6 @@ import (
 	"crypto/aes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -66,7 +65,7 @@ func (file File) GetNumChunks() int64 {
 		fmt.Println(e)
 	}
 
-	log.Printf("File size: %d\n", fileInfo.Size())
+	//log.Printf("File size: %d\n", fileInfo.Size())
 	payloadSize := fileInfo.Size() - HeaderSize
 
 	numChunks := payloadSize / EncryptedChunkSize
@@ -95,7 +94,6 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 	}
 
 	f, err := os.Open(file.encryptedPath)
-	// if we os.Open returns an error then handle it
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +101,7 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 
 	chunkOffset := HeaderSize + chunkIndex*EncryptedChunkSize
 
-	log.Printf("Chunk offset: %d\n", chunkOffset)
+	//log.Printf("Chunk offset: %d\n", chunkOffset)
 
 	_, err = f.Seek(chunkOffset, io.SeekStart)
 	if err != nil {
@@ -116,7 +114,7 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 		return nil, err
 	}
 
-	fmt.Printf("Read %d\n", numRead)
+	//fmt.Printf("Read %d\n", numRead)
 
 	chunkNonce := chunk[:16]
 	payload := chunk[16 : numRead-32]
@@ -128,7 +126,7 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 	return decryptedBlock, nil
 }
 
-func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) {
+func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) error {
 	mac := hmac.New(sha256.New, file.crypto.macKey)
 
 	var macBuffer bytes.Buffer
@@ -142,10 +140,15 @@ func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) {
 
 	calculatedMAC := mac.Sum(nil)
 
-	log.Printf("MAC Size: %d\n", len(macBytes))
-	log.Printf("Expected:   %s\n", base64.StdEncoding.EncodeToString(macBytes))
-	log.Printf("Calculated: %s\n", base64.StdEncoding.EncodeToString(calculatedMAC))
+	if !hmac.Equal(macBytes, calculatedMAC) {
+		return errors.New("Invalid MAC")
+	}
 
+	//log.Printf("MAC Size: %d\n", len(macBytes))
+	//log.Printf("Expected:   %s\n", base64.StdEncoding.EncodeToString(macBytes))
+	//log.Printf("Calculated: %s\n", base64.StdEncoding.EncodeToString(calculatedMAC))
+
+	return nil
 }
 
 // writeHeader creates necessary nonce and writes the Cryptomator header.
@@ -171,12 +174,12 @@ func (file *File) writeHeader() error {
 	}
 	copy(payloadBuffer[8:], file.contentKey)
 
-	fmt.Println(base64.StdEncoding.EncodeToString(payloadBuffer))
+	//fmt.Println(base64.StdEncoding.EncodeToString(payloadBuffer))
 
 	encryptedPayload := applyCTR(block, payloadBuffer, file.nonce)
 
-	fmt.Println(base64.StdEncoding.EncodeToString(encryptedPayload))
-	fmt.Printf("Encrypted payload size %d\n", len(encryptedPayload))
+	//fmt.Println(base64.StdEncoding.EncodeToString(encryptedPayload))
+	//fmt.Printf("Encrypted payload size %d\n", len(encryptedPayload))
 
 	binary.Write(&header, binary.LittleEndian, encryptedPayload)
 
