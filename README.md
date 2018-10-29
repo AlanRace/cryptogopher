@@ -18,7 +18,7 @@ Get a sub directory from the vault at the path /test/inner and output its conten
 ```golang
 fmt.Println("--- test/inner/ Content ---")
 innerDir := rootDir.GetSubDirectory("test/inner")
-innerDir..Print()
+innerDir.Print()
 ```
 
 Create a new file in the root directory and write some text to it
