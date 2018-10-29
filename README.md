@@ -1,7 +1,7 @@
 # cryptogopher
 Go library for accessing Cryptomator vaults (https://cryptomator.org)
 
-# Useage
+## Usage
 Open a vault at the specified location and with the specified passphrase.
 ```golang
 vault, err := cryptogopher.Open(vaultLocation, passphrase)
