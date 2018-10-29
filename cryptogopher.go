@@ -69,25 +69,8 @@ type CryptomatorVault struct {
 	aessiv     *miscreant.Cipher
 }
 
-// Open opens a Cryptomator vault
-func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
-	masterKeyFileLocation := filepath.Join(vaultLocation, masterKeyFilename)
-
-	// Open our jsonFile
-	jsonFile, err := os.Open(masterKeyFileLocation)
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer jsonFile.Close()
-
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-
-	var masterKey masterKeyFile
-	json.Unmarshal([]byte(byteValue), &masterKey)
-
-	var crypto CryptomatorVault
-	crypto.masterKeyFile = &masterKey
+func (crypto *CryptomatorVault) setMasterKeyFile(masterKey *masterKeyFile, password string) {
+	crypto.masterKeyFile = masterKey
 
 	dk, err := scrypt.Key([]byte(password), masterKey.ScryptSalt, masterKey.ScryptCostParam, masterKey.ScryptBlockSize, 1, 32)
 	if err != nil {
@@ -114,10 +97,31 @@ func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
 		fmt.Println(err)
 	}
 
-	crypto.vaultLocation = vaultLocation
 	crypto.primaryKey = primaryMasterKey
 	crypto.macKey = macKey
 	crypto.aessiv = aessiv
+}
+
+// Open opens a Cryptomator vault
+func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
+	masterKeyFileLocation := filepath.Join(vaultLocation, masterKeyFilename)
+
+	// Open our jsonFile
+	jsonFile, err := os.Open(masterKeyFileLocation)
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	var masterKey masterKeyFile
+	json.Unmarshal([]byte(byteValue), &masterKey)
+
+	var crypto CryptomatorVault
+	crypto.vaultLocation = vaultLocation
+	crypto.setMasterKeyFile(&masterKey, password)
 
 	return &crypto, nil
 }
