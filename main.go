@@ -4,7 +4,7 @@ import (
 	"flag"
 	"fmt"
 
-	"github.com/AlanRace/cryptogopher"
+	"github.com/AlanRace/cryptogopher/cryptogopher"
 )
 
 func main() {
