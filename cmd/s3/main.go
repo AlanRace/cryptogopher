@@ -3,11 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
+	"os"
 
 	"github.com/AlanRace/cryptogopher"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
 )
 
 // Uploads a file to S3 given a bucket and object key. Also takes a duration
@@ -28,6 +29,21 @@ func main() {
 	flag.StringVar(&passphrase, "passphrase", "", "Vault passphrase")
 	flag.Parse()
 
+	if passphrase == "" {
+		passFile, err := os.Open("pass")
+		// if we os.Open returns an error then handle it
+		if err != nil {
+			fmt.Println(err)
+		}
+		defer passFile.Close()
+
+		byteValue, _ := ioutil.ReadAll(passFile)
+
+		passphrase = string(byteValue[:len(byteValue)-1])
+
+		fmt.Println(passphrase)
+	}
+
 	// All clients require a Session. The Session provides the client with
 	// shared configuration such as region, endpoint, and credentials. A
 	// Session should be shared where possible to take advantage of
@@ -39,13 +55,7 @@ func main() {
 		Region:   aws.String("us-east-1"),
 	}))
 
-	// Create a new instance of the service's client with a Session.
-	// Optional aws.Config values can also be provided as variadic arguments
-	// to the New function. This option allows you to provide service
-	// specific configuration.
-	svc := s3.New(sess)
-
-	s3Vault, err := cryptogopher.OpenS3(svc, bucket, vaultLocation, passphrase)
+	s3Vault, err := cryptogopher.OpenS3(sess, bucket, vaultLocation, passphrase)
 	if err != nil {
 		fmt.Println(err)
 	}

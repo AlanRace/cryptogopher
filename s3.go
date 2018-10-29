@@ -1,11 +1,16 @@
 package cryptogopher
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 type S3Vault struct {
@@ -15,11 +20,17 @@ type S3Vault struct {
 	bucket string
 }
 
-func OpenS3(svc *s3.S3, bucket string, vaultLocation string, password string) (*S3Vault, error) {
+func OpenS3(sess *session.Session, bucket string, vaultLocation string, password string) (*S3Vault, error) {
 	var vault S3Vault
-	vault.svc = svc
+	//vault.svc = svc
 	vault.bucket = bucket
 	vault.vaultLocation = vaultLocation
+
+	// Create a new instance of the service's client with a Session.
+	// Optional aws.Config values can also be provided as variadic arguments
+	// to the New function. This option allows you to provide service
+	// specific configuration.
+	svc := s3.New(sess)
 
 	input := &s3.ListObjectsInput{
 		Bucket:    aws.String(vault.bucket),
@@ -45,7 +56,44 @@ func OpenS3(svc *s3.S3, bucket string, vaultLocation string, password string) (*
 		return nil, err
 	}
 
-	fmt.Println(result.Contents)
+	fmt.Println(result.Contents[0].Key)
+
+	file, err := os.Create("masterkey.cryptomator")
+	if err != nil {
+		fmt.Println("Unable to open file %q, %v", err)
+	}
+
+	defer file.Close()
+
+	downloader := s3manager.NewDownloader(sess)
+
+	numBytes, err := downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(bucket),
+			Key:    aws.String(*result.Contents[0].Key),
+		})
+	if err != nil {
+		fmt.Println("Unable to download item %q, %v", result.Contents[0].Key, err)
+	}
+
+	fmt.Println("Downloaded", file.Name(), numBytes, "bytes")
+
+	// Open our jsonFile
+	jsonFile, err := os.Open("masterkey.cryptomator")
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	var masterKey masterKeyFile
+	json.Unmarshal([]byte(byteValue), &masterKey)
+
+	var crypto CryptomatorVault
+	crypto.vaultLocation = vaultLocation
+	crypto.setMasterKeyFile(&masterKey, password)
 
 	return &vault, nil
 }
