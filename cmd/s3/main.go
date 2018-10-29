@@ -61,4 +61,9 @@ func main() {
 	}
 
 	fmt.Println(s3Vault)
+
+	rootDir := s3Vault.GetRootDirectory()
+
+	fmt.Println("--- Root Content ---")
+	rootDir.Print()
 }

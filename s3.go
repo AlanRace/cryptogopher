@@ -91,9 +91,8 @@ func OpenS3(sess *session.Session, bucket string, vaultLocation string, password
 	var masterKey masterKeyFile
 	json.Unmarshal([]byte(byteValue), &masterKey)
 
-	var crypto CryptomatorVault
-	crypto.vaultLocation = vaultLocation
-	crypto.setMasterKeyFile(&masterKey, password)
+	vault.vaultLocation = vaultLocation
+	vault.setMasterKeyFile(&masterKey, password)
 
 	return &vault, nil
 }

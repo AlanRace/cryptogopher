@@ -85,8 +85,8 @@ func (dir *Directory) CreateFile(filename string) (*File, error) {
 
 func (dir *Directory) updateDirectory() {
 
-	//log.Printf("Updating directory %s \n", dir.encryptedPath)
-	//log.Printf("UUID %s\n", dir.uuid)
+	log.Printf("Updating directory %s \n", dir.encryptedPath)
+	log.Printf("UUID %s\n", dir.uuid)
 
 	files, err := ioutil.ReadDir(dir.encryptedPath)
 	if err != nil {
