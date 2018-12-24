@@ -11,7 +11,7 @@ import (
 
 // Directory is a directory in a Cryptomator vault
 type Directory interface {
-	ReadDir() ([]os.FileInfo, error)
+	GetFileNames() ([]string, error)
 	GetSubDirectory(string) Directory
 	GetDecryptedName() string
 	GetCryptomatorVault() CryptomatorVault
@@ -108,8 +108,18 @@ func (dir *LocalDirectory) CreateFile(filename string) (*File, error) {
 	return &file, nil
 }
 
-func (dir LocalDirectory) ReadDir() ([]os.FileInfo, error) {
-	return ioutil.ReadDir(dir.encryptedPath)
+func (dir LocalDirectory) GetFileNames() ([]string, error) {
+	var filenames []string
+	files, err := ioutil.ReadDir(dir.encryptedPath)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, f := range files {
+		filenames = append(filenames, f.Name())
+	}
+
+	return filenames, nil
 }
 
 func (dir *LocalDirectory) updateDirectory() {
@@ -117,21 +127,21 @@ func (dir *LocalDirectory) updateDirectory() {
 	log.Printf("Updating directory %s \n", dir.encryptedPath)
 	log.Printf("UUID %s\n", dir.uuid)
 
-	files, err := dir.ReadDir()
+	filenames, err := dir.GetFileNames()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, f := range files {
-		if f.Name()[0] == '0' {
+	for _, filename := range filenames {
+		if filename[0] == '0' {
 			var subDir LocalDirectory
 
-			decrypted, err := dir.crypto.DecryptFilename(f.Name()[1:], dir.uuid)
+			decrypted, err := dir.crypto.DecryptFilename(filename[1:], dir.uuid)
 			if err != nil {
 				fmt.Println(err)
 			}
 
-			b, err := ioutil.ReadFile(filepath.Join(dir.encryptedPath, f.Name())) // just pass the file name
+			b, err := ioutil.ReadFile(filepath.Join(dir.encryptedPath, filename)) // just pass the file name
 			if err != nil {
 				fmt.Print(err)
 			}
@@ -146,7 +156,7 @@ func (dir *LocalDirectory) updateDirectory() {
 		} else {
 			var file File
 
-			decrypted, err := dir.crypto.DecryptFilename(f.Name(), dir.uuid)
+			decrypted, err := dir.crypto.DecryptFilename(filename, dir.uuid)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -154,7 +164,7 @@ func (dir *LocalDirectory) updateDirectory() {
 			file.crypto = dir.crypto
 			file.decryptedPath = filepath.Join(dir.decryptedPath, decrypted)
 			file.decryptedName = decrypted
-			file.encryptedPath = filepath.Join(dir.encryptedPath, f.Name())
+			file.encryptedPath = filepath.Join(dir.encryptedPath, filename)
 
 			dir.files = append(dir.files, file)
 		}

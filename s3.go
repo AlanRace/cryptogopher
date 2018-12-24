@@ -42,8 +42,38 @@ func (crypto S3Vault) GetRootDirectory() Directory {
 	return Directory(&dir)
 }
 
-func (dir S3Directory) ReadDir() ([]os.FileInfo, error) {
-	return ioutil.ReadDir(dir.encryptedPath)
+func (dir S3Directory) GetFileNames() ([]string, error) {
+	var filenames []string
+
+	input := &s3.ListObjectsInput{
+		Bucket:    aws.String(dir.crypto.bucket),
+		Prefix:    aws.String(dir.encryptedPath),
+		Delimiter: aws.String(""),
+	}
+
+	fmt.Println(input)
+
+	result, err := dir.crypto.svc.ListObjects(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket:
+				fmt.Println(s3.ErrCodeNoSuchBucket, aerr.Error())
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+
+		return nil, err
+	}
+
+	fmt.Println(result)
+
+	return filenames, nil
 }
 
 func (dir *S3Directory) updateDirectory() {
@@ -51,21 +81,21 @@ func (dir *S3Directory) updateDirectory() {
 	log.Printf("Updating S3 directory %s \n", dir.encryptedPath)
 	log.Printf("UUID %s\n", dir.uuid)
 
-	files, err := ioutil.ReadDir(dir.encryptedPath)
+	filenames, err := dir.GetFileNames()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	for _, f := range files {
-		if f.Name()[0] == '0' {
+	for _, filename := range filenames {
+		if filename[0] == '0' {
 			var subDir S3Directory
 
-			decrypted, err := dir.crypto.DecryptFilename(f.Name()[1:], dir.uuid)
+			decrypted, err := dir.crypto.DecryptFilename(filename[1:], dir.uuid)
 			if err != nil {
 				fmt.Println(err)
 			}
 
-			b, err := ioutil.ReadFile(filepath.Join(dir.encryptedPath, f.Name())) // just pass the file name
+			b, err := ioutil.ReadFile(filepath.Join(dir.encryptedPath, filename)) // just pass the file name
 			if err != nil {
 				fmt.Print(err)
 			}
@@ -80,7 +110,7 @@ func (dir *S3Directory) updateDirectory() {
 		} else {
 			var file File
 
-			decrypted, err := dir.crypto.DecryptFilename(f.Name(), dir.uuid)
+			decrypted, err := dir.crypto.DecryptFilename(filename, dir.uuid)
 			if err != nil {
 				fmt.Println(err)
 			}
@@ -88,7 +118,7 @@ func (dir *S3Directory) updateDirectory() {
 			file.crypto = dir.crypto
 			file.decryptedPath = filepath.Join(dir.decryptedPath, decrypted)
 			file.decryptedName = decrypted
-			file.encryptedPath = filepath.Join(dir.encryptedPath, f.Name())
+			file.encryptedPath = filepath.Join(dir.encryptedPath, filename)
 
 			dir.files = append(dir.files, file)
 		}
@@ -107,7 +137,7 @@ func OpenS3(sess *session.Session, bucket string, vaultLocation string, password
 	// Optional aws.Config values can also be provided as variadic arguments
 	// to the New function. This option allows you to provide service
 	// specific configuration.
-	svc := s3.New(sess)
+	vault.svc = s3.New(sess)
 
 	input := &s3.ListObjectsInput{
 		Bucket:    aws.String(vault.bucket),
@@ -115,7 +145,7 @@ func OpenS3(sess *session.Session, bucket string, vaultLocation string, password
 		Delimiter: aws.String("/"),
 	}
 
-	result, err := svc.ListObjects(input)
+	result, err := vault.svc.ListObjects(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
 			switch aerr.Code() {
