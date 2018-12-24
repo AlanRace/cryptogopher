@@ -42,7 +42,7 @@ func (file *File) processHeader() error {
 	encryptedPayload := headerBytes[16:56]
 	//headerMAC := byteValue[56:88]
 
-	block, err := aes.NewCipher(file.crypto.primaryKey)
+	block, err := aes.NewCipher(file.crypto.getPrimaryKey())
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +127,7 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 }
 
 func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) error {
-	mac := hmac.New(sha256.New, file.crypto.macKey)
+	mac := hmac.New(sha256.New, file.crypto.getMacKey())
 
 	var macBuffer bytes.Buffer
 
@@ -164,7 +164,7 @@ func (file *File) writeHeader() error {
 
 	binary.Write(&header, binary.LittleEndian, file.nonce)
 
-	block, err := aes.NewCipher(file.crypto.primaryKey)
+	block, err := aes.NewCipher(file.crypto.getPrimaryKey())
 	if err != nil {
 		panic(err)
 	}
@@ -183,7 +183,7 @@ func (file *File) writeHeader() error {
 
 	binary.Write(&header, binary.LittleEndian, encryptedPayload)
 
-	mac := hmac.New(sha256.New, file.crypto.macKey)
+	mac := hmac.New(sha256.New, file.crypto.getMacKey())
 	mac.Write(header.Bytes())
 	calculatedMAC := mac.Sum(nil)
 
@@ -225,7 +225,7 @@ func (file File) WriteChunk(data []byte, chunkIndex int64) error {
 
 	binary.Write(&payload, binary.LittleEndian, encryptedPayload)
 
-	mac := hmac.New(sha256.New, file.crypto.macKey)
+	mac := hmac.New(sha256.New, file.crypto.getMacKey())
 
 	mac.Write(file.nonce)
 	binary.Write(&macBuffer, binary.BigEndian, chunkIndex)

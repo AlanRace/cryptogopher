@@ -51,16 +51,27 @@ type masterKeyFile struct {
 	Version          int
 }
 
+type CryptomatorVault interface {
+	EncryptFilename(plaintext string, directory string) (string, error)
+	DecryptFilename(encrypted string, directory string) (string, error)
+	GetRootDirectory() Directory
+
+	getFilePath(directory string) string
+	getPrimaryKey() []byte
+	getMacKey() []byte
+}
+
 // CryptomatorFile is a file in a cryptomator vault. This could either be a real file, or a directory
 type CryptomatorFile struct {
-	crypto        *CryptomatorVault
 	encryptedPath string
 	decryptedPath string
 	decryptedName string
+
+	crypto CryptomatorVault
 }
 
 // CryptomatorVault is a vault in the Cryptomator format
-type CryptomatorVault struct {
+type BaseCryptomatorVault struct {
 	vaultLocation string
 	masterKeyFile *masterKeyFile
 
@@ -69,7 +80,19 @@ type CryptomatorVault struct {
 	aessiv     *miscreant.Cipher
 }
 
-func (crypto *CryptomatorVault) setMasterKeyFile(masterKey *masterKeyFile, password string) {
+type LocalCryptomatorVault struct {
+	BaseCryptomatorVault
+}
+
+func (crypto *BaseCryptomatorVault) getPrimaryKey() []byte {
+	return crypto.primaryKey
+}
+
+func (crypto *BaseCryptomatorVault) getMacKey() []byte {
+	return crypto.macKey
+}
+
+func (crypto *BaseCryptomatorVault) setMasterKeyFile(masterKey *masterKeyFile, password string) {
 	crypto.masterKeyFile = masterKey
 
 	dk, err := scrypt.Key([]byte(password), masterKey.ScryptSalt, masterKey.ScryptCostParam, masterKey.ScryptBlockSize, 1, 32)
@@ -103,7 +126,7 @@ func (crypto *CryptomatorVault) setMasterKeyFile(masterKey *masterKeyFile, passw
 }
 
 // Open opens a Cryptomator vault
-func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
+func Open(vaultLocation string, password string) (*LocalCryptomatorVault, error) {
 	masterKeyFileLocation := filepath.Join(vaultLocation, masterKeyFilename)
 
 	// Open our jsonFile
@@ -119,7 +142,7 @@ func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
 	var masterKey masterKeyFile
 	json.Unmarshal([]byte(byteValue), &masterKey)
 
-	var crypto CryptomatorVault
+	var crypto LocalCryptomatorVault
 	crypto.vaultLocation = vaultLocation
 	crypto.setMasterKeyFile(&masterKey, password)
 
@@ -127,7 +150,7 @@ func Open(vaultLocation string, password string) (*CryptomatorVault, error) {
 }
 
 // DecryptFilename decrypts a filename in the specified directory (directory UUID)
-func (crypto CryptomatorVault) DecryptFilename(encrypted string, directory string) (string, error) {
+func (crypto BaseCryptomatorVault) DecryptFilename(encrypted string, directory string) (string, error) {
 	folderEncoded, err := base32.StdEncoding.DecodeString(encrypted)
 	if err != nil {
 		return "", err
@@ -142,7 +165,7 @@ func (crypto CryptomatorVault) DecryptFilename(encrypted string, directory strin
 }
 
 // EncryptFilename encrypts a filename in the specified directory (directory UUID)
-func (crypto CryptomatorVault) EncryptFilename(plaintext string, directory string) (string, error) {
+func (crypto BaseCryptomatorVault) EncryptFilename(plaintext string, directory string) (string, error) {
 	folderEncoded, err := crypto.aessiv.Seal(nil, []byte(plaintext), []byte(directory))
 	if err != nil {
 		return "", err
@@ -152,7 +175,7 @@ func (crypto CryptomatorVault) EncryptFilename(plaintext string, directory strin
 }
 
 // HashDirectoryID performs hasing on directory (directory UUID)
-func (crypto CryptomatorVault) HashDirectoryID(directory string) string {
+func (crypto BaseCryptomatorVault) HashDirectoryID(directory string) string {
 	decoded, err := crypto.aessiv.Seal(nil, []byte(directory))
 	if err != nil {
 		fmt.Println(err)
@@ -163,15 +186,15 @@ func (crypto CryptomatorVault) HashDirectoryID(directory string) string {
 	return base32.StdEncoding.EncodeToString(hashedBytes[:])
 }
 
-func (crypto CryptomatorVault) getFilePath(directory string) string {
+func (crypto BaseCryptomatorVault) getFilePath(directory string) string {
 	hash := crypto.HashDirectoryID(directory)
 
 	return filepath.Join(crypto.vaultLocation, "d", hash[:2], hash[2:])
 }
 
 // GetRootDirectory returns the root directory of the vault
-func (crypto CryptomatorVault) GetRootDirectory() Directory {
-	var dir Directory
+func (crypto LocalCryptomatorVault) GetRootDirectory() Directory {
+	var dir LocalDirectory
 
 	dir.crypto = &crypto
 	dir.decryptedPath = ""
@@ -180,7 +203,7 @@ func (crypto CryptomatorVault) GetRootDirectory() Directory {
 
 	dir.updateDirectory()
 
-	return dir
+	return Directory(&dir)
 }
 
 // GetEncryptedPath returns the encrypted version of the file path (the one as it appears on disk)

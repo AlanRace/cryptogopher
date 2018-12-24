@@ -10,7 +10,18 @@ import (
 )
 
 // Directory is a directory in a Cryptomator vault
-type Directory struct {
+type Directory interface {
+	ReadDir() ([]os.FileInfo, error)
+	GetSubDirectory(string) Directory
+	GetDecryptedName() string
+	GetCryptomatorVault() CryptomatorVault
+	Print()
+	CreateFile(filename string) (*File, error)
+
+	updateDirectory()
+}
+
+type BaseDirectory struct {
 	CryptomatorFile
 
 	uuid  string
@@ -18,19 +29,33 @@ type Directory struct {
 	files []File
 }
 
+type LocalDirectory struct {
+	BaseDirectory
+
+	crypto *LocalCryptomatorVault
+}
+
+func (dir LocalDirectory) GetCryptomatorVault() CryptomatorVault {
+	return CryptomatorVault(dir.crypto)
+}
+
+func (dir BaseDirectory) GetDecryptedName() string {
+	return dir.decryptedName
+}
+
 // GetSubDirectory returns a directory at the specified subpath
-func (dir *Directory) GetSubDirectory(path string) *Directory {
+func (dir BaseDirectory) GetSubDirectory(path string) Directory {
 	pathParts := strings.Split(path, string(os.PathSeparator))
 
 	for index, subDir := range dir.dirs {
-		if subDir.decryptedName == pathParts[0] {
+		if subDir.GetDecryptedName() == pathParts[0] {
 			dir.dirs[index].updateDirectory()
 
 			if len(pathParts) > 1 {
 				return dir.dirs[index].GetSubDirectory(filepath.Join(pathParts[1:]...))
 			}
 
-			return &dir.dirs[index]
+			return dir.dirs[index]
 		}
 	}
 
@@ -38,11 +63,11 @@ func (dir *Directory) GetSubDirectory(path string) *Directory {
 }
 
 // Print prints the contents of the directory
-func (dir Directory) Print() {
+func (dir BaseDirectory) Print() {
 	//fmt.Println(dir.decryptedPath)
 
 	for _, dir := range dir.dirs {
-		fmt.Printf("D\t%s\n", dir.decryptedName)
+		fmt.Printf("D\t%s\n", dir.GetDecryptedName())
 	}
 
 	for _, file := range dir.files {
@@ -51,8 +76,8 @@ func (dir Directory) Print() {
 }
 
 // CreateFile creates a file an empty file in the directory and writes out the header in Cryptomator's format.
-func (dir *Directory) CreateFile(filename string) (*File, error) {
-	encryptedFilename, err := dir.crypto.EncryptFilename(filename, dir.uuid)
+func (dir *LocalDirectory) CreateFile(filename string) (*File, error) {
+	encryptedFilename, err := dir.GetCryptomatorVault().EncryptFilename(filename, dir.uuid)
 	if err != nil {
 		return nil, err
 	}
@@ -83,19 +108,23 @@ func (dir *Directory) CreateFile(filename string) (*File, error) {
 	return &file, nil
 }
 
-func (dir *Directory) updateDirectory() {
+func (dir LocalDirectory) ReadDir() ([]os.FileInfo, error) {
+	return ioutil.ReadDir(dir.encryptedPath)
+}
+
+func (dir *LocalDirectory) updateDirectory() {
 
 	log.Printf("Updating directory %s \n", dir.encryptedPath)
 	log.Printf("UUID %s\n", dir.uuid)
 
-	files, err := ioutil.ReadDir(dir.encryptedPath)
+	files, err := dir.ReadDir()
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	for _, f := range files {
 		if f.Name()[0] == '0' {
-			var subDir Directory
+			var subDir LocalDirectory
 
 			decrypted, err := dir.crypto.DecryptFilename(f.Name()[1:], dir.uuid)
 			if err != nil {
@@ -113,7 +142,7 @@ func (dir *Directory) updateDirectory() {
 			subDir.uuid = string(b) // convert content to a 'string'
 			subDir.encryptedPath = dir.crypto.getFilePath(subDir.uuid)
 
-			dir.dirs = append(dir.dirs, subDir)
+			dir.dirs = append(dir.dirs, &subDir)
 		} else {
 			var file File
 
