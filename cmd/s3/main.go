@@ -60,10 +60,21 @@ func main() {
 		fmt.Println(err)
 	}
 
-	fmt.Println(s3Vault)
+	//fmt.Println(s3Vault)
 
 	rootDir := s3Vault.GetRootDirectory()
 
 	fmt.Println("--- Root Content ---")
 	rootDir.Print()
+
+	fmt.Println("--- NPL/ Content ---")
+	nplDir := rootDir.GetSubDirectory("NPL")
+	nplDir.Print()
+
+	newFile, err := nplDir.CreateFile("hello.txt")
+	newFile.WriteChunk([]byte("Hi my friendly encrypted data"), 0)
+
+	chunkData, err := newFile.ReadChunk(0)
+
+	fmt.Println(string(chunkData))
 }

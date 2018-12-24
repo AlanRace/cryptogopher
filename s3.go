@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -19,6 +20,7 @@ type S3Vault struct {
 	BaseCryptomatorVault
 
 	svc    *s3.S3
+	sess   *session.Session
 	bucket string
 }
 
@@ -51,8 +53,6 @@ func (dir S3Directory) GetFileNames() ([]string, error) {
 		Delimiter: aws.String(""),
 	}
 
-	fmt.Println(input)
-
 	result, err := dir.crypto.svc.ListObjects(input)
 	if err != nil {
 		if aerr, ok := err.(awserr.Error); ok {
@@ -71,7 +71,13 @@ func (dir S3Directory) GetFileNames() ([]string, error) {
 		return nil, err
 	}
 
-	fmt.Println(result)
+	for _, content := range result.Contents {
+		filename := strings.Replace(*content.Key, dir.encryptedPath+"/", "", 1)
+
+		if filename != "" {
+			filenames = append(filenames, filename)
+		}
+	}
 
 	return filenames, nil
 }
@@ -95,7 +101,7 @@ func (dir *S3Directory) updateDirectory() {
 				fmt.Println(err)
 			}
 
-			b, err := ioutil.ReadFile(filepath.Join(dir.encryptedPath, filename)) // just pass the file name
+			b, err := dir.crypto.downloadAndReadFile(filepath.Join(dir.encryptedPath, filename)) // just pass the file name
 			if err != nil {
 				fmt.Print(err)
 			}
@@ -127,11 +133,57 @@ func (dir *S3Directory) updateDirectory() {
 	//return dir
 }
 
+func (vault S3Vault) downloadAndReadFile(filename string) ([]byte, error) {
+	file, err := vault.downloadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	// Open our jsonFile
+	jsonFile, err := os.Open(file.Name())
+	// if we os.Open returns an error then handle it
+	if err != nil {
+		fmt.Println(err)
+	}
+	defer jsonFile.Close()
+
+	byteValue, _ := ioutil.ReadAll(jsonFile)
+
+	return byteValue, nil
+}
+
+func (vault S3Vault) downloadFile(filename string) (*os.File, error) {
+	basefile := filepath.Base(filename)
+
+	file, err := os.Create(basefile)
+	if err != nil {
+		fmt.Println("Unable to open file %q, %v", err)
+	}
+
+	defer file.Close()
+
+	downloader := s3manager.NewDownloader(vault.sess)
+
+	numBytes, err := downloader.Download(file,
+		&s3.GetObjectInput{
+			Bucket: aws.String(vault.bucket),
+			Key:    aws.String(filename),
+		})
+	if err != nil {
+		fmt.Println("Unable to download item %q, %v", filename, err)
+	}
+
+	fmt.Println("Downloaded", file.Name(), numBytes, "bytes")
+
+	return file, nil
+}
+
 func OpenS3(sess *session.Session, bucket string, vaultLocation string, password string) (*S3Vault, error) {
 	var vault S3Vault
 	//vault.svc = svc
 	vault.bucket = bucket
 	vault.vaultLocation = vaultLocation
+	vault.sess = sess
 
 	// Create a new instance of the service's client with a Session.
 	// Optional aws.Config values can also be provided as variadic arguments
@@ -163,37 +215,10 @@ func OpenS3(sess *session.Session, bucket string, vaultLocation string, password
 		return nil, err
 	}
 
-	fmt.Println(result.Contents[0].Key)
-
-	file, err := os.Create("masterkey.cryptomator")
+	byteValue, err := vault.downloadAndReadFile(*result.Contents[0].Key)
 	if err != nil {
-		fmt.Println("Unable to open file %q, %v", err)
+		return nil, err
 	}
-
-	defer file.Close()
-
-	downloader := s3manager.NewDownloader(sess)
-
-	numBytes, err := downloader.Download(file,
-		&s3.GetObjectInput{
-			Bucket: aws.String(bucket),
-			Key:    aws.String(*result.Contents[0].Key),
-		})
-	if err != nil {
-		fmt.Println("Unable to download item %q, %v", result.Contents[0].Key, err)
-	}
-
-	fmt.Println("Downloaded", file.Name(), numBytes, "bytes")
-
-	// Open our jsonFile
-	jsonFile, err := os.Open("masterkey.cryptomator")
-	// if we os.Open returns an error then handle it
-	if err != nil {
-		fmt.Println(err)
-	}
-	defer jsonFile.Close()
-
-	byteValue, _ := ioutil.ReadAll(jsonFile)
 
 	var masterKey masterKeyFile
 	json.Unmarshal([]byte(byteValue), &masterKey)
