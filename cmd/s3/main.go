@@ -67,6 +67,10 @@ func main() {
 	fmt.Println("--- Root Content ---")
 	rootDir.Print()
 
+	firstFile, err := rootDir.GetFile(1)
+
+	fmt.Println(firstFile.GetNumChunks())
+
 	fmt.Println("--- NPL/ Content ---")
 	nplDir := rootDir.GetSubDirectory("NPL")
 	nplDir.Print()

@@ -16,13 +16,14 @@ type Directory interface {
 	GetDecryptedName() string
 	GetCryptomatorVault() CryptomatorVault
 	Print()
-	CreateFile(filename string) (*File, error)
+	CreateFile(filename string) (File, error)
+	GetFile(index int) (File, error)
 
 	updateDirectory()
 }
 
 type BaseDirectory struct {
-	CryptomatorFile
+	CryptomatorFileOrDir
 
 	uuid  string
 	dirs  []Directory
@@ -41,6 +42,10 @@ func (dir LocalDirectory) GetCryptomatorVault() CryptomatorVault {
 
 func (dir BaseDirectory) GetDecryptedName() string {
 	return dir.decryptedName
+}
+
+func (dir BaseDirectory) GetFile(index int) (File, error) {
+	return dir.files[index], nil
 }
 
 // GetSubDirectory returns a directory at the specified subpath
@@ -71,12 +76,12 @@ func (dir BaseDirectory) Print() {
 	}
 
 	for _, file := range dir.files {
-		fmt.Printf("F\t%s\n", file.decryptedName)
+		fmt.Printf("F\t%s\n", file.GetDecryptedName())
 	}
 }
 
 // CreateFile creates a file an empty file in the directory and writes out the header in Cryptomator's format.
-func (dir *LocalDirectory) CreateFile(filename string) (*File, error) {
+func (dir *LocalDirectory) CreateFile(filename string) (File, error) {
 	encryptedFilename, err := dir.GetCryptomatorVault().EncryptFilename(filename, dir.uuid)
 	if err != nil {
 		return nil, err
@@ -85,7 +90,7 @@ func (dir *LocalDirectory) CreateFile(filename string) (*File, error) {
 	//fmt.Printf("Encrypted filename: %s\n", encryptedFilename)
 	//fmt.Printf("Encrypted path: %s\n", filepath.Join(dir.encryptedPath, encryptedFilename))
 
-	var file File
+	var file LocalFile
 	file.crypto = dir.crypto
 	file.decryptedName = filename
 	file.decryptedPath = filepath.Join(dir.decryptedPath, filename)
@@ -105,7 +110,7 @@ func (dir *LocalDirectory) CreateFile(filename string) (*File, error) {
 
 	dir.files = append(dir.files, file)
 
-	return &file, nil
+	return File(&file), nil
 }
 
 func (dir LocalDirectory) GetFileNames() ([]string, error) {
@@ -154,7 +159,7 @@ func (dir *LocalDirectory) updateDirectory() {
 
 			dir.dirs = append(dir.dirs, &subDir)
 		} else {
-			var file File
+			var file LocalFile
 
 			decrypted, err := dir.crypto.DecryptFilename(filename, dir.uuid)
 			if err != nil {

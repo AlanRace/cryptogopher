@@ -30,6 +30,12 @@ type S3Directory struct {
 	crypto *S3Vault
 }
 
+type S3File struct {
+	BaseFile
+
+	crypto *S3Vault
+}
+
 // GetRootDirectory returns the root directory of the vault
 func (crypto S3Vault) GetRootDirectory() Directory {
 	var dir S3Directory
@@ -114,7 +120,7 @@ func (dir *S3Directory) updateDirectory() {
 
 			dir.dirs = append(dir.dirs, &subDir)
 		} else {
-			var file File
+			var file S3File
 
 			decrypted, err := dir.crypto.DecryptFilename(filename, dir.uuid)
 			if err != nil {
@@ -234,7 +240,7 @@ func (dir S3Directory) GetCryptomatorVault() CryptomatorVault {
 }
 
 // CreateFile creates a file an empty file in the directory and writes out the header in Cryptomator's format.
-func (dir *S3Directory) CreateFile(filename string) (*File, error) {
+func (dir *S3Directory) CreateFile(filename string) (File, error) {
 	encryptedFilename, err := dir.GetCryptomatorVault().EncryptFilename(filename, dir.uuid)
 	if err != nil {
 		return nil, err
@@ -243,7 +249,7 @@ func (dir *S3Directory) CreateFile(filename string) (*File, error) {
 	//fmt.Printf("Encrypted filename: %s\n", encryptedFilename)
 	//fmt.Printf("Encrypted path: %s\n", filepath.Join(dir.encryptedPath, encryptedFilename))
 
-	var file File
+	var file S3File
 	file.crypto = dir.crypto
 	file.decryptedName = filename
 	file.decryptedPath = filepath.Join(dir.decryptedPath, filename)
@@ -263,5 +269,57 @@ func (dir *S3Directory) CreateFile(filename string) (*File, error) {
 
 	dir.files = append(dir.files, file)
 
-	return &file, nil
+	return File(&file), nil
+}
+
+func (file *S3File) writeHeader() {
+
+}
+
+// GetNumChunks returns the number of chunks that would make up this file
+func (file S3File) GetNumChunks() int64 {
+	input := &s3.ListObjectsInput{
+		Bucket:    aws.String(file.crypto.bucket),
+		Prefix:    aws.String(file.encryptedPath),
+		Delimiter: aws.String(""),
+	}
+
+	result, err := file.crypto.svc.ListObjects(input)
+	if err != nil {
+		if aerr, ok := err.(awserr.Error); ok {
+			switch aerr.Code() {
+			case s3.ErrCodeNoSuchBucket:
+				fmt.Println(s3.ErrCodeNoSuchBucket, aerr.Error())
+			default:
+				fmt.Println(aerr.Error())
+			}
+		} else {
+			// Print the error, cast err to awserr.Error to get the Code and
+			// Message from an error.
+			fmt.Println(err.Error())
+		}
+
+		return -1
+	}
+
+	fileSize := result.Contents[0].Size
+
+	//log.Printf("File size: %d\n", fileInfo.Size())
+	payloadSize := *fileSize - HeaderSize
+
+	numChunks := payloadSize / EncryptedChunkSize
+
+	if numChunks*EncryptedChunkSize < payloadSize {
+		numChunks++
+	}
+
+	return numChunks
+}
+
+func (file S3File) ReadChunk(chunkIndex int64) ([]byte, error) {
+	return nil, nil
+}
+
+func (file S3File) WriteChunk(data []byte, chunkIndex int64) error {
+	return nil
 }

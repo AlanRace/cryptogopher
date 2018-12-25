@@ -14,15 +14,30 @@ import (
 	"os"
 )
 
+type File interface {
+	GetNumChunks() int64
+	GetDecryptedName() string
+	ReadChunk(chunkIndex int64) ([]byte, error)
+	WriteChunk(data []byte, chunkIndex int64) error
+}
+
 // File is a file stored within a Cryptomator vault
-type File struct {
-	CryptomatorFile
+type BaseFile struct {
+	CryptomatorFileOrDir
 
 	nonce      []byte
 	contentKey []byte
 }
 
-func (file *File) processHeader() error {
+type LocalFile struct {
+	BaseFile
+}
+
+func (file BaseFile) GetDecryptedName() string {
+	return file.decryptedName
+}
+
+func (file *LocalFile) processHeader() error {
 	// Open our jsonFile
 	f, err := os.Open(file.encryptedPath)
 	// if we os.Open returns an error then handle it
@@ -58,7 +73,7 @@ func (file *File) processHeader() error {
 }
 
 // GetNumChunks returns the number of chunks that would make up this file
-func (file File) GetNumChunks() int64 {
+func (file LocalFile) GetNumChunks() int64 {
 	fileInfo, e := os.Stat(file.encryptedPath)
 	if e != nil {
 		// TODO: Handle error
@@ -78,7 +93,7 @@ func (file File) GetNumChunks() int64 {
 }
 
 // ReadChunk reads and decompresses the chunk at the specified index
-func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
+func (file LocalFile) ReadChunk(chunkIndex int64) ([]byte, error) {
 	if chunkIndex >= file.GetNumChunks() {
 		return nil, errors.New("Invalid chunkIndex")
 	}
@@ -126,7 +141,7 @@ func (file File) ReadChunk(chunkIndex int64) ([]byte, error) {
 	return decryptedBlock, nil
 }
 
-func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) error {
+func (file BaseFile) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) error {
 	mac := hmac.New(sha256.New, file.crypto.getMacKey())
 
 	var macBuffer bytes.Buffer
@@ -152,7 +167,7 @@ func (file File) checkMAC(macBytes, nonce, payload []byte, chunkNumber int64) er
 }
 
 // writeHeader creates necessary nonce and writes the Cryptomator header.
-func (file *File) writeHeader() error {
+func (file *LocalFile) writeHeader() error {
 	f, err := os.Create(file.encryptedPath)
 	defer f.Close()
 	if err != nil {
@@ -198,7 +213,7 @@ func (file *File) writeHeader() error {
 }
 
 // WriteChunk encrypts and then writes a chunk of data to the file.
-func (file File) WriteChunk(data []byte, chunkIndex int64) error {
+func (file LocalFile) WriteChunk(data []byte, chunkIndex int64) error {
 	f, err := os.OpenFile(file.encryptedPath, os.O_APPEND|os.O_WRONLY, os.ModeAppend)
 	defer f.Close()
 	if err != nil {

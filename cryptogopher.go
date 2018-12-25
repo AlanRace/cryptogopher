@@ -62,7 +62,7 @@ type CryptomatorVault interface {
 }
 
 // CryptomatorFile is a file in a cryptomator vault. This could either be a real file, or a directory
-type CryptomatorFile struct {
+type CryptomatorFileOrDir struct {
 	encryptedPath string
 	decryptedPath string
 	decryptedName string
@@ -207,7 +207,7 @@ func (crypto LocalCryptomatorVault) GetRootDirectory() Directory {
 }
 
 // GetEncryptedPath returns the encrypted version of the file path (the one as it appears on disk)
-func (file CryptomatorFile) GetEncryptedPath() string {
+func (file CryptomatorFileOrDir) GetEncryptedPath() string {
 	return file.encryptedPath
 }
 
